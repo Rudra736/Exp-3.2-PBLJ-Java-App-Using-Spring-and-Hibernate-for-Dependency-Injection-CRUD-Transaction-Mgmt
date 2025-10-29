@@ -1,0 +1,253 @@
+// 1: Maven Dependencies
+
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>spring-hibernate-crud</artifactId>
+    <version>1.0</version>
+
+    <dependencies>
+        <!-- Spring Core -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>6.1.0</version>
+        </dependency>
+
+        <!-- Hibernate -->
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+            <version>6.4.1.Final</version>
+        </dependency>
+
+        <!-- MySQL Connector -->
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>8.3.0</version>
+        </dependency>
+
+        <!-- Spring ORM -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-orm</artifactId>
+            <version>6.1.0</version>
+        </dependency>
+
+        <!-- JPA API -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+            <version>3.1.0</version>
+        </dependency>
+    </dependencies>
+</project>
+
+//2: Hibernate Configuration
+
+<!DOCTYPE hibernate-configuration PUBLIC 
+ "-//Hibernate/Hibernate Configuration DTD 3.0//EN" 
+ "http://hibernate.sourceforge.net/hibernate-configuration-3.0.dtd">
+<hibernate-configuration>
+  <session-factory>
+    <property name="hibernate.dialect">org.hibernate.dialect.MySQLDialect</property>
+    <property name="hibernate.connection.driver_class">com.mysql.cj.jdbc.Driver</property>
+    <property name="hibernate.connection.url">jdbc:mysql://localhost:3306/studentdb</property>
+    <property name="hibernate.connection.username">root</property>
+    <property name="hibernate.connection.password">root</property>
+    <property name="hibernate.hbm2ddl.auto">update</property>
+    <property name="hibernate.show_sql">true</property>
+  </session-factory>
+</hibernate-configuration>
+
+//3: Entity Class
+
+package com.example.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "students")
+public class Student {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+    private String name;
+    private String course;
+    private int marks;
+
+    // Getters and Setters
+    public int getId() { return id; }
+    public void setId(int id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getCourse() { return course; }
+    public void setCourse(String course) { this.course = course; }
+    public int getMarks() { return marks; }
+    public void setMarks(int marks) { this.marks = marks; }
+}
+// 4: DAO Layer
+
+package com.example.dao;
+
+import java.util.List;
+import org.hibernate.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Repository;
+import com.example.entity.Student;
+
+@Repository
+public class StudentDAO {
+
+    @Autowired
+    private SessionFactory sessionFactory;
+
+    public void save(Student s) {
+        sessionFactory.getCurrentSession().save(s);
+    }
+
+    public List<Student> list() {
+        return sessionFactory.getCurrentSession()
+                .createQuery("from Student", Student.class)
+                .list();
+    }
+
+    public void update(Student s) {
+        sessionFactory.getCurrentSession().update(s);
+    }
+
+    public void delete(int id) {
+        Student s = sessionFactory.getCurrentSession().get(Student.class, id);
+        if (s != null)
+            sessionFactory.getCurrentSession().delete(s);
+    }
+}
+
+// 5: Service Layer
+package com.example.service;
+
+import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import com.example.dao.StudentDAO;
+import com.example.entity.Student;
+
+@Service
+public class StudentService {
+
+    @Autowired
+    private StudentDAO dao;
+
+    @Transactional
+    public void addStudent(Student s) {
+        dao.save(s);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Student> getAll() {
+        return dao.list();
+    }
+
+    @Transactional
+    public void updateStudent(Student s) {
+        dao.update(s);
+    }
+
+    @Transactional
+    public void deleteStudent(int id) {
+        dao.delete(id);
+    }
+}
+
+//6: Spring Configuration Class
+package com.example.config;
+
+import java.util.Properties;
+import javax.sql.DataSource;
+import org.hibernate.SessionFactory;
+import org.springframework.context.annotation.*;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.orm.hibernate5.*;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+@Configuration
+@ComponentScan(basePackages = "com.example")
+@EnableTransactionManagement
+public class AppConfig {
+
+    @Bean
+    public DataSource dataSource() {
+        DriverManagerDataSource ds = new DriverManagerDataSource();
+        ds.setDriverClassName("com.mysql.cj.jdbc.Driver");
+        ds.setUrl("jdbc:mysql://localhost:3306/studentdb");
+        ds.setUsername("root");
+        ds.setPassword("root");
+        return ds;
+    }
+
+    @Bean
+    public LocalSessionFactoryBean sessionFactory() {
+        LocalSessionFactoryBean sf = new LocalSessionFactoryBean();
+        sf.setDataSource(dataSource());
+        sf.setPackagesToScan("com.example.entity");
+        Properties props = new Properties();
+        props.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
+        props.put("hibernate.hbm2ddl.auto", "update");
+        props.put("hibernate.show_sql", "true");
+        sf.setHibernateProperties(props);
+        return sf;
+    }
+
+    @Bean
+    public HibernateTransactionManager transactionManager(SessionFactory sf) {
+        return new HibernateTransactionManager(sf);
+    }
+}
+
+//7: Main Class
+
+package com.example;
+
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import com.example.config.AppConfig;
+import com.example.entity.Student;
+import com.example.service.StudentService;
+
+public class MainApp {
+    public static void main(String[] args) {
+        AnnotationConfigApplicationContext context =
+                new AnnotationConfigApplicationContext(AppConfig.class);
+
+        StudentService service = context.getBean(StudentService.class);
+
+        // Create
+        Student s = new Student();
+        s.setName("Rudra");
+        s.setCourse("Java");
+        s.setMarks(90);
+        service.addStudent(s);
+
+        // Read
+        service.getAll().forEach(st -> 
+            System.out.println(st.getId() + " " + st.getName() + " " + st.getCourse())
+        );
+
+        // Update
+        s.setMarks(95);
+        service.updateStudent(s);
+
+        // Delete
+        service.deleteStudent(1);
+
+        context.close();
+    }
+}
+
+//Output Example:
+Hibernate: insert into students (course, marks, name) values (?, ?, ?)
+Hibernate: select student0_.id as id1_0_, student0_.course as course2_0_, student0_.marks as marks3_0_, student0_.name as name4_0_ from students student0_
+1 Rudra Java
+Hibernate: update students set course=?, marks=?, name=? where id=?
+Hibernate: delete from students where id=?
